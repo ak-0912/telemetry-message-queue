@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package mq.v1;
+
+option go_package = "github.com/cisco-interview/telemetry-message-queue/proto/mq/v1;mqv1";
+
+service MessageQueueService {
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  rpc PublishBatch(PublishBatchReq) returns (PublishBatchResp);
+  rpc Fetch(FetchRequest) returns (FetchResponse);
+  rpc CommitOffset(CommitRequest) returns (CommitResponse);
+  rpc JoinGroup(JoinRequest) returns (JoinResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc GetAssignment(AssignRequest) returns (AssignResponse);
+  rpc LeaveGroup(LeaveRequest) returns (LeaveResponse);
+}
+
+message PublishRequest {
+  string topic = 1;
+  string key = 2;
+  bytes payload = 3;
+}
+
+message PublishResponse {
+  int32 partition = 1;
+  int64 offset = 2;
+}
+
+message PublishBatchReq {
+  repeated PublishRequest messages = 1;
+}
+
+message PublishBatchResp {
+  repeated PublishResponse results = 1;
+}
+
+message FetchRequest {
+  string group = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 offset = 4;
+  int32 max = 5;
+}
+
+message FetchResponse {
+  repeated Message messages = 1;
+}
+
+message Message {
+  int32 partition = 1;
+  int64 offset = 2;
+  string key = 3;
+  bytes payload = 4;
+  int64 published_at = 5;
+}
+
+message CommitRequest {
+  string group = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 offset = 4;
+}
+
+message CommitResponse {
+  bool ok = 1;
+}
+
+message JoinRequest {
+  string group = 1;
+  string topic = 2;
+  string member_id = 3;
+}
+
+message JoinResponse {
+  string generation_id = 1;
+}
+
+message HeartbeatRequest {
+  string group = 1;
+  string member_id = 2;
+  string generation_id = 3;
+}
+
+message HeartbeatResponse {
+  bool rebalance_needed = 1;
+}
+
+message AssignRequest {
+  string group = 1;
+  string member_id = 2;
+  string generation_id = 3;
+}
+
+message AssignResponse {
+  repeated PartitionAssignment assignments = 1;
+}
+
+message PartitionAssignment {
+  int32 partition = 1;
+  int64 start_offset = 2;
+}
+
+message LeaveRequest {
+  string group = 1;
+  string member_id = 2;
+}
+
+message LeaveResponse {
+  bool ok = 1;
+}
