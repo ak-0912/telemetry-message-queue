@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -19,10 +20,11 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "localhost:50051", "message queue gRPC address")
-	group := flag.String("group", "telemetry-collector", "consumer group")
-	topic := flag.String("topic", domain.DefaultTopic, "topic")
-	member := flag.String("member", hostname(), "member id")
+	// Defaults can come from env (e.g. Docker Compose); flags override when passed on the CLI.
+	addr := flag.String("addr", envOr("MQ_GRPC_ADDR", envOr("MQ_ADDR", "localhost:50051")), "message queue gRPC host:port")
+	group := flag.String("group", envOr("MQ_GROUP", "telemetry-collector"), "consumer group")
+	topic := flag.String("topic", envOr("MQ_TOPIC", domain.DefaultTopic), "topic")
+	member := flag.String("member", envOr("MQ_MEMBER", hostname()), "member id")
 	maxFetch := flag.Int("max", 200, "max messages per fetch")
 	flag.Parse()
 
@@ -117,6 +119,17 @@ func consumePartition(ctx context.Context, cli mqv1.MessageQueueServiceClient, g
 			}
 			continue
 		}
+		log.Printf("partition %d fetched %d message(s) from offset %d", part, len(msgs), off)
+		for _, m := range msgs {
+			log.Printf(
+				"consumed message partition=%d offset=%d key=%q payload_bytes=%d published_at_ns=%d",
+				m.GetPartition(),
+				m.GetOffset(),
+				m.GetKey(),
+				len(m.GetPayload()),
+				m.GetPublishedAt(),
+			)
+		}
 		last := msgs[len(msgs)-1].GetOffset()
 		next := last + 1
 		if _, err := cli.CommitOffset(ctx, &mqv1.CommitRequest{
@@ -134,4 +147,11 @@ func hostname() string {
 		return "collector"
 	}
 	return h
+}
+
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }

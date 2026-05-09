@@ -1,4 +1,4 @@
-.PHONY: build run proto stop vet lint test test-coverage generate
+.PHONY: build run stop clean-data proto vet lint test test-coverage generate
 
 BIN_DIR       := bin
 SERVER_BIN    := $(BIN_DIR)/mq-server
@@ -45,6 +45,14 @@ stop:
 	@if [ ! -f $(PID_FILE) ]; then echo "not running ($(PID_FILE) missing)"; exit 0; fi
 	@kill $$(cat $(PID_FILE)) 2>/dev/null && rm -f $(PID_FILE) && echo stopped || \
 		(rm -f $(PID_FILE); echo "process gone; removed stale $(PID_FILE)")
+
+# Remove persisted queue state (partition WALs + offset JSON). Stop mq-server first
+# (make stop, or Ctrl+C if you started it with go run); otherwise the process may error or hold stale fds.
+clean-data:
+	@if [ -f $(PID_FILE) ]; then echo "Stopping mq-server (from $(PID_FILE))..."; $(MAKE) stop; fi
+	rm -rf $(DATA_DIR)
+	@mkdir -p $(DATA_DIR)
+	@echo "Cleaned $(DATA_DIR). Restart mq-server for an empty queue."
 
 test:
 	go test ./...

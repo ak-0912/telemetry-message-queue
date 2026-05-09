@@ -1,0 +1,18 @@
+{
+  "name": "telemetry-message-queue Dev Container",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "telemetry-message-queue",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "forwardPorts": [50051],
+  "portsAttributes": {
+    "50051": {
+      "label": "gRPC (mq-server)"
+    }
+  },
+  "postCreateCommand": "mkdir -p data/mq && go mod download",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go"]
+    }
+  }
+}
