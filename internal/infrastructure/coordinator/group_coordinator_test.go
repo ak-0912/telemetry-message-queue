@@ -44,7 +44,7 @@ func TestGroupCoordinator_twoMembers_rangeSplit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(6, 30, off, nil)
+	c := NewGroupCoordinator(6, 30, 10, off, nil)
 
 	gen1, err := c.Join(ctx, "g", "topic", "b")
 	if err != nil {
@@ -94,7 +94,7 @@ func TestGroupCoordinator_heartbeatStaleGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 30, off, nil)
+	c := NewGroupCoordinator(4, 30, 10, off, nil)
 	gen1, err := c.Join(ctx, "g", "topic", "m1")
 	if err != nil {
 		t.Fatal(err)
@@ -122,8 +122,8 @@ func TestGroupCoordinator_groupFull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 30, off, nil)
-	for i := range maxGroupMembers {
+	c := NewGroupCoordinator(4, 30, 3, off, nil)
+	for i := range 3 {
 		_, err := c.Join(ctx, "g", "topic", "m"+strconv.Itoa(i))
 		if err != nil {
 			t.Fatalf("join %d: %v", i, err)
@@ -142,7 +142,7 @@ func TestGroupCoordinator_Join_topicMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 30, off, nil)
+	c := NewGroupCoordinator(4, 30, 10, off, nil)
 	if _, err := c.Join(ctx, "g", "t1", "m1"); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestGroupCoordinator_CurrentGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 30, off, nil)
+	c := NewGroupCoordinator(4, 30, 10, off, nil)
 	if g := c.CurrentGeneration("missing"); g != "" {
 		t.Fatalf("got %q", g)
 	}
@@ -179,7 +179,7 @@ func TestGroupCoordinator_Heartbeat_unknownGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 30, off, nil)
+	c := NewGroupCoordinator(4, 30, 10, off, nil)
 	_, _, err = c.Heartbeat(ctx, "none", "m", "1")
 	if err == nil {
 		t.Fatal("want error")
@@ -193,7 +193,7 @@ func TestGroupCoordinator_Assignment_unknownGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 30, off, nil)
+	c := NewGroupCoordinator(4, 30, 10, off, nil)
 	_, err = c.Assignment(ctx, "none", "m", "1")
 	if err == nil {
 		t.Fatal("want error")
@@ -206,7 +206,7 @@ func TestGroupCoordinator_Run_stopsOnCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(2, 30, off, nil)
+	c := NewGroupCoordinator(2, 30, 10, off, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -228,7 +228,7 @@ func TestGroupCoordinator_evictStaleMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewGroupCoordinator(4, 1, off, nil) // 1s heartbeat timeout
+	c := NewGroupCoordinator(4, 1, 10, off, nil) // 1s heartbeat timeout
 	_, err = c.Join(ctx, "g", "topic", "alive")
 	if err != nil {
 		t.Fatal(err)

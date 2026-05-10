@@ -32,7 +32,7 @@ func testServer(t *testing.T) *MessageQueueServer {
 		t.Fatal(err)
 	}
 	_, met := metrics.NewRegistry()
-	coord := coordinator.NewGroupCoordinator(partCount, 30, off, met.IncRebalance)
+	coord := coordinator.NewGroupCoordinator(partCount, 30, 10, off, met.IncRebalance)
 	pub := &application.PublishUsecase{Partitions: part, PartitionCount: partCount, Metrics: met}
 	fetch := &application.FetchUsecase{Partitions: part, PartitionCount: partCount, Offsets: off, Metrics: met}
 	commit := &application.CommitOffsetUsecase{Partitions: part, PartitionCount: partCount, Offsets: off}

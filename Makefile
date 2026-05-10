@@ -2,8 +2,6 @@
 
 BIN_DIR       := bin
 SERVER_BIN    := $(BIN_DIR)/mq-server
-CSV_BIN       := $(BIN_DIR)/csv-streamer
-COLL_BIN      := $(BIN_DIR)/telemetry-collector
 PID_FILE      := .mq-server.pid
 DATA_DIR      := ./data/mq
 GRPC_PORT     ?= 50051
@@ -19,8 +17,6 @@ lint:
 build: vet lint
 	mkdir -p $(BIN_DIR)
 	go build -o $(SERVER_BIN) ./cmd/server
-	go build -o $(CSV_BIN) ./cmd/csv-streamer
-	go build -o $(COLL_BIN) ./cmd/telemetry-collector
 
 proto:
 	go generate ./...

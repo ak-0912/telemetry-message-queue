@@ -15,6 +15,7 @@ type Config struct {
 	DataDir             string
 	Retention           time.Duration
 	HeartbeatTimeoutSec int
+	MaxGroupMembers     int
 	MaxPartitionSize    int
 	LogLevel            string
 	FetchBatchDefault   int32
@@ -32,6 +33,7 @@ func Load() (*Config, error) {
 	v.SetDefault("DATA_DIR", "/data/mq")
 	v.SetDefault("RETENTION_HOURS", 24)
 	v.SetDefault("HEARTBEAT_TIMEOUT_SEC", 15)
+	v.SetDefault("MAX_GROUP_MEMBERS", 10)
 	v.SetDefault("MAX_PARTITION_SIZE", 100000)
 	v.SetDefault("FETCH_BATCH_DEFAULT", 200)
 	_ = v.BindEnv("LOG_LEVEL", "LOG_LEVEL")
@@ -50,6 +52,7 @@ func Load() (*Config, error) {
 		DataDir:             v.GetString("DATA_DIR"),
 		Retention:           time.Duration(retentionH) * time.Hour,
 		HeartbeatTimeoutSec: v.GetInt("HEARTBEAT_TIMEOUT_SEC"),
+		MaxGroupMembers:     v.GetInt("MAX_GROUP_MEMBERS"),
 		MaxPartitionSize:    v.GetInt("MAX_PARTITION_SIZE"),
 		LogLevel:            logLevel,
 		FetchBatchDefault:   int32(v.GetInt("FETCH_BATCH_DEFAULT")),

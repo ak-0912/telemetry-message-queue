@@ -1,0 +1,25 @@
+# Git and IDE
+.git
+.gitignore
+.cursor
+.vscode
+.idea
+
+# Local / CI artifacts
+bin
+coverage.out
+*.out
+.mq-server.pid
+data
+
+# Docs and samples (not needed to compile)
+docs
+*.md
+!README.md
+
+# Helm and devcontainer (not in Go module compile path for mq-server)
+helm
+.devcontainer
+
+# Large sample data optional — uncomment if images must stay minimal
+# *.csv

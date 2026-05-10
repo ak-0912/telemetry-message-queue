@@ -12,6 +12,7 @@ func TestLoad_overrides(t *testing.T) {
 	t.Setenv("MQ_DATA_DIR", "/tmp/mq")
 	t.Setenv("MQ_RETENTION_HOURS", "48")
 	t.Setenv("MQ_HEARTBEAT_TIMEOUT_SEC", "20")
+	t.Setenv("MQ_MAX_GROUP_MEMBERS", "12")
 	t.Setenv("MQ_MAX_PARTITION_SIZE", "5000")
 	t.Setenv("MQ_FETCH_BATCH_DEFAULT", "64")
 	t.Setenv("LOG_LEVEL", "debug")
@@ -26,7 +27,7 @@ func TestLoad_overrides(t *testing.T) {
 	if c.PartitionCount != 128 || c.DataDir != "/tmp/mq" {
 		t.Fatalf("partition/data %+v", c)
 	}
-	if c.Retention != 48*time.Hour || c.HeartbeatTimeoutSec != 20 {
+	if c.Retention != 48*time.Hour || c.HeartbeatTimeoutSec != 20 || c.MaxGroupMembers != 12 {
 		t.Fatalf("retention/heartbeat %+v", c)
 	}
 	if c.MaxPartitionSize != 5000 || c.FetchBatchDefault != 64 {

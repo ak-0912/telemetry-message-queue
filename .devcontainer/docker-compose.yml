@@ -9,10 +9,6 @@ services:
       MQ_DATA_DIR: /workspaces/${localWorkspaceFolderBasename}/data/mq
       MQ_GRPC_PORT: "50051"
       MQ_HTTP_PORT: "8080"
-      # Used by cmd/telemetry-collector (see envOr in main.go). gRPC must reach a running mq-server.
-      MQ_GRPC_ADDR: "127.0.0.1:50051"
-      MQ_GROUP: "telemetry-collector"
-      MQ_TOPIC: "gpu-telemetry"
     volumes:
       - ..:/workspaces/${localWorkspaceFolderBasename}:cached
     # Dev container stays up for local development; mq-server is not started automatically.

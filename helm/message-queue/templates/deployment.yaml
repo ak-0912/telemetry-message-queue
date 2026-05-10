@@ -40,6 +40,8 @@ spec:
               value: "{{ .Values.config.retentionHours }}"
             - name: MQ_HEARTBEAT_TIMEOUT_SEC
               value: "{{ .Values.config.heartbeatTimeoutSec }}"
+            - name: MQ_MAX_GROUP_MEMBERS
+              value: "{{ .Values.config.maxGroupMembers }}"
             - name: MQ_MAX_PARTITION_SIZE
               value: "{{ .Values.config.maxPartitionSize }}"
             - name: LOG_LEVEL

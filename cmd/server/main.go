@@ -51,7 +51,7 @@ func main() {
 	}
 
 	reg, m := metrics.NewRegistry()
-	coord := coordinator.NewGroupCoordinator(cfg.PartitionCount, cfg.HeartbeatTimeoutSec, offStore, m.IncRebalance)
+	coord := coordinator.NewGroupCoordinator(cfg.PartitionCount, cfg.HeartbeatTimeoutSec, cfg.MaxGroupMembers, offStore, m.IncRebalance)
 
 	publishUC := &application.PublishUsecase{
 		Partitions:     partStore,

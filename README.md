@@ -50,7 +50,7 @@ Under `MQ_DATA_DIR` (default `/data/mq`):
 
 ## Commands (`cmd/`)
 
-All binaries are also produced by `make build` under `bin/`.
+`make build` produces `mq-server` under `bin/`.
 
 ### `cmd/server` → `mq-server`
 
@@ -64,38 +64,6 @@ The main message queue process: gRPC API, HTTP health/metrics, background retent
 go run ./cmd/server
 # or
 ./bin/mq-server
-```
-
-### `cmd/csv-streamer`
-
-Streams a DCGM-style CSV and publishes one message per **data** row. Each row is JSON-encoded (all columns as strings); the **`uuid`** column is used as the gRPC **`key`** (partition routing). Header row is required.
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-csv` | `dcgm_metrics_20250718_134233.csv` | Input CSV path. |
-| `-addr` | `localhost:50051` | gRPC server address. |
-| `-topic` | `gpu-telemetry` | Topic name. |
-
-```bash
-go run ./cmd/csv-streamer -csv ./dcgm_metrics_20250718_134233.csv -addr localhost:50051 -topic gpu-telemetry
-./bin/csv-streamer -h
-```
-
-### `cmd/telemetry-collector`
-
-Demo **consumer**: joins a group, starts a **heartbeat** ticker (every 5s), **GetAssignment**, then runs one goroutine per assigned partition that **Fetch**es in a loop and **CommitOffset**s to `lastOffset + 1` after each non-empty batch. On SIGINT/SIGTERM it cancels context and **LeaveGroup**. It does **not** automatically handle **rebalance** beyond logging `rebalance_needed`; production workers should re-join and refresh assignments when the generation changes.
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-addr` | `localhost:50051` | gRPC server address. |
-| `-group` | `telemetry-collector` | Consumer group id. |
-| `-topic` | `gpu-telemetry` | Topic to consume. |
-| `-member` | host name | Unique member id in the group. |
-| `-max` | `200` | Max messages per **Fetch** (capped server-side by defaults too). |
-
-```bash
-go run ./cmd/telemetry-collector -addr localhost:50051 -group telemetry-collector -topic gpu-telemetry -member worker-1
-./bin/telemetry-collector -h
 ```
 
 ---
@@ -114,10 +82,10 @@ go generate ./...
 
 ## Build
 
-Runs `go vet`, staticcheck (`lint`), then builds all binaries.
+Runs `go vet`, staticcheck (`lint`), then builds binaries.
 
 ```bash
-make build          # vet + lint + compile
+make build          # vet + lint + compile mq-server
 make proto          # regenerate protobuf (Buf via go generate)
 make run            # background server; PID in .mq-server.pid
 make stop           # kill server from PID file
@@ -125,7 +93,7 @@ make test
 make test-coverage  # ./internal/... + ./pkg/... coverage; fails if below 80% (override e.g. COVERAGE_MIN=75)
 ```
 
-Outputs: `bin/mq-server`, `bin/csv-streamer`, `bin/telemetry-collector`.
+`make build` output: `bin/mq-server`
 
 ## Run server locally
 
@@ -144,22 +112,6 @@ make stop
 
 - gRPC: `:50051`
 - HTTP: `http://localhost:8080/healthz`, `/readyz`, `/metrics`
-
-## End-to-end with sample CSV
-
-Terminal 1 — server (as above).
-
-Terminal 2 — publish DCGM CSV (`uuid` column is the partition key):
-
-```bash
-go run ./cmd/csv-streamer -csv dcgm_metrics_20250718_134233.csv -addr localhost:50051
-```
-
-Terminal 3 — consumer (commits after each batch):
-
-```bash
-go run ./cmd/telemetry-collector -addr localhost:50051 -group telemetry-collector -topic gpu-telemetry
-```
 
 ## Configuration (environment)
 
@@ -195,8 +147,6 @@ Set `image.repository` / `image.tag` in `values.yaml` to your registry.
 ```
 cmd/
   server/                 # mq-server — production entrypoint
-  csv-streamer/           # CSV → Publish
-  telemetry-collector/    # demo consumer
 internal/
   domain/                 # types + ports
   application/            # use cases

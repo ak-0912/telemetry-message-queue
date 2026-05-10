@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -184,16 +185,22 @@ func (s *MemoryPartitionStore) Fetch(ctx context.Context, topic string, partitio
 	}
 	pl.mu.Lock()
 	defer pl.mu.Unlock()
-	var out []domain.Message
-	for _, m := range pl.messages {
-		if m.Offset < offset {
-			continue
-		}
-		out = append(out, m)
-		if int32(len(out)) >= max {
-			break
-		}
+	if max <= 0 {
+		return nil, nil
 	}
+	start := sort.Search(len(pl.messages), func(i int) bool {
+		return pl.messages[i].Offset >= offset
+	})
+	if start >= len(pl.messages) {
+		return nil, nil
+	}
+	end := start + int(max)
+	if end > len(pl.messages) {
+		end = len(pl.messages)
+	}
+	var out []domain.Message
+	out = make([]domain.Message, 0, end-start)
+	out = append(out, pl.messages[start:end]...)
 	// Return deep copy of payloads
 	for i := range out {
 		out[i].Payload = append([]byte(nil), out[i].Payload...)

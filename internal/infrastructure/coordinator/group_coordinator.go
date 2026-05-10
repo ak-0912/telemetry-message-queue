@@ -11,16 +11,17 @@ import (
 	"github.com/cisco-interview/telemetry-message-queue/internal/domain"
 )
 
-const maxGroupMembers = 10
+const defaultMaxGroupMembers = 10
 
 // GroupCoordinator implements range assignment and heartbeat-driven rebalancing.
 type GroupCoordinator struct {
 	mu sync.Mutex
 
-	partitionCount int
-	heartbeatTTL   time.Duration
-	offsets        domain.OffsetStore
-	onRebalance    func()
+	partitionCount  int
+	heartbeatTTL    time.Duration
+	maxGroupMembers int
+	offsets         domain.OffsetStore
+	onRebalance     func()
 
 	groups map[string]*groupState // group name
 }
@@ -34,13 +35,17 @@ type groupState struct {
 
 // NewGroupCoordinator creates a coordinator. partitionCount is used for assignments.
 // onRebalance is optional; called after each rebalance (assignment recompute).
-func NewGroupCoordinator(partitionCount int, heartbeatTimeoutSec int, offsets domain.OffsetStore, onRebalance func()) *GroupCoordinator {
+func NewGroupCoordinator(partitionCount int, heartbeatTimeoutSec int, maxGroupMembers int, offsets domain.OffsetStore, onRebalance func()) *GroupCoordinator {
+	if maxGroupMembers <= 0 {
+		maxGroupMembers = defaultMaxGroupMembers
+	}
 	return &GroupCoordinator{
-		partitionCount: partitionCount,
-		heartbeatTTL:   time.Duration(heartbeatTimeoutSec) * time.Second,
-		offsets:        offsets,
-		onRebalance:    onRebalance,
-		groups:         make(map[string]*groupState),
+		partitionCount:  partitionCount,
+		heartbeatTTL:    time.Duration(heartbeatTimeoutSec) * time.Second,
+		maxGroupMembers: maxGroupMembers,
+		offsets:         offsets,
+		onRebalance:     onRebalance,
+		groups:          make(map[string]*groupState),
 	}
 }
 
@@ -61,9 +66,9 @@ func (c *GroupCoordinator) Join(ctx context.Context, group, topic, memberID stri
 	} else if st.topic == "" {
 		st.topic = topic
 	}
-	if len(st.members) >= maxGroupMembers {
+	if len(st.members) >= c.maxGroupMembers {
 		if _, exists := st.members[memberID]; !exists {
-			return "", fmt.Errorf("group %q is full (max %d members)", group, maxGroupMembers)
+			return "", fmt.Errorf("group %q is full (max %d members)", group, c.maxGroupMembers)
 		}
 	}
 	st.members[memberID] = time.Now()
