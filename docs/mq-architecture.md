@@ -86,7 +86,7 @@ The RPC surface is defined in `proto/mq/v1/mq.proto` as `MessageQueueService`:
 
 `internal/infrastructure/coordinator/group_coordinator.go`:
 
-- **Join**: adds member, increments **generation**, runs **rebalance**. A group is tied to a single topic; duplicate topic mismatch is an error; cap on distinct members (`maxGroupMembers`).
+- **Join**: adds a new member, increments **generation**, and runs **rebalance**. If the member is already present (a rejoin after rebalance), only the heartbeat timestamp is refreshed — generation is **not** bumped, preventing a rejoin storm. A group is tied to a single topic; duplicate topic mismatch is an error; cap on distinct members (`maxGroupMembers`).
 - **Range assignment**: members sorted by ID; each gets a contiguous range of partition indices (`partitionCount / n` style split).
 - **Heartbeat**: updates last-seen time; compares client `generation_id` to current — mismatch means **rebalance needed**.
 - **Stale eviction**: heartbeats older than TTL are removed; generation bumps and rebalance.
