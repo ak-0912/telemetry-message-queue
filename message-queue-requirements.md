@@ -148,8 +148,9 @@ message-queue/
 │       └── templates/
 │           ├── deployment.yaml
 │           ├── service.yaml
-│           ├── configmap.yaml
-│           └── hpa.yaml
+│           ├── pvc.yaml
+│           ├── hpa.yaml
+│           └── _helpers.tpl
 │
 ├── Dockerfile
 ├── go.mod
@@ -418,20 +419,6 @@ spec:
   resources:
     requests:
       storage: 10Gi
-```
-
-### configmap.yaml
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: message-queue-config
-data:
-  MQ_PARTITION_COUNT: "256"
-  MQ_RETENTION_HOURS: "24"
-  MQ_HEARTBEAT_TIMEOUT_SEC: "15"
-  MQ_MAX_PARTITION_SIZE: "100000"
-  LOG_LEVEL: "info"
 ```
 
 ---

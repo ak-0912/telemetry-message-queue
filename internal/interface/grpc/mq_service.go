@@ -1,3 +1,4 @@
+// Package grpcsvc adapts the application use cases into a gRPC transport layer.
 package grpcsvc
 
 import (
@@ -14,22 +15,23 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// MessageQueueServer implements mqv1.MessageQueueServiceServer.
+// MessageQueueServer implements the gRPC MessageQueueService.
+// Fields are exported so the server can be assembled in cmd/server/main.go
+// without a constructor; each field is required unless noted.
 type MessageQueueServer struct {
 	mqv1.UnimplementedMessageQueueServiceServer
-	Log *slog.Logger
 
-	Partitions     domain.PartitionStore
-	PartitionCount int
-
-	PublishUC *application.PublishUsecase
-	FetchUC   *application.FetchUsecase
-	CommitUC  *application.CommitOffsetUsecase
-	CoordUC   *application.CoordinatorUsecase
-
-	FetchDefaultMax int32
+	Log            *slog.Logger
+	Partitions     domain.PartitionStore            // used by JoinGroup to auto-create topics
+	PartitionCount int                              // must match the store's partition count
+	PublishUC      *application.PublishUsecase       // publish handler
+	FetchUC        *application.FetchUsecase         // fetch handler
+	CommitUC       *application.CommitOffsetUsecase  // commit + ensure-consumer-topic
+	CoordUC        *application.CoordinatorUsecase   // consumer group lifecycle
+	FetchDefaultMax int32                            // per-RPC default when client sends max=0
 }
 
+// Publish appends a single message to the topic partition determined by key.
 func (s *MessageQueueServer) Publish(ctx context.Context, req *mqv1.PublishRequest) (*mqv1.PublishResponse, error) {
 	if req.GetTopic() == "" || req.GetKey() == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic and key required")
@@ -42,6 +44,7 @@ func (s *MessageQueueServer) Publish(ctx context.Context, req *mqv1.PublishReque
 	return &mqv1.PublishResponse{Partition: part, Offset: off}, nil
 }
 
+// PublishBatch publishes multiple messages atomically (first failure aborts).
 func (s *MessageQueueServer) PublishBatch(ctx context.Context, req *mqv1.PublishBatchReq) (*mqv1.PublishBatchResp, error) {
 	out := &mqv1.PublishBatchResp{}
 	for _, m := range req.GetMessages() {
@@ -50,6 +53,7 @@ func (s *MessageQueueServer) PublishBatch(ctx context.Context, req *mqv1.Publish
 		}
 		part, off, err := s.PublishUC.Publish(ctx, m.GetTopic(), m.GetKey(), m.GetPayload())
 		if err != nil {
+			s.Log.Error("publish_batch failed", "component", "grpc", "topic", m.GetTopic(), "err", err)
 			return nil, mapRPCError(err)
 		}
 		out.Results = append(out.Results, &mqv1.PublishResponse{Partition: part, Offset: off})
@@ -57,6 +61,7 @@ func (s *MessageQueueServer) PublishBatch(ctx context.Context, req *mqv1.Publish
 	return out, nil
 }
 
+// Fetch reads messages from a partition starting at the requested offset.
 func (s *MessageQueueServer) Fetch(ctx context.Context, req *mqv1.FetchRequest) (*mqv1.FetchResponse, error) {
 	if req.GetGroup() == "" || req.GetTopic() == "" {
 		return nil, status.Error(codes.InvalidArgument, "group and topic required")
@@ -70,6 +75,7 @@ func (s *MessageQueueServer) Fetch(ctx context.Context, req *mqv1.FetchRequest) 
 	}
 	msgs, err := s.FetchUC.Fetch(ctx, req.GetGroup(), req.GetTopic(), req.GetPartition(), req.GetOffset(), max)
 	if err != nil {
+		s.Log.Error("fetch failed", "component", "grpc", "group", req.GetGroup(), "topic", req.GetTopic(), "partition", req.GetPartition(), "err", err)
 		return nil, mapRPCError(err)
 	}
 	resp := &mqv1.FetchResponse{Messages: make([]*mqv1.Message, 0, len(msgs))}
@@ -79,16 +85,19 @@ func (s *MessageQueueServer) Fetch(ctx context.Context, req *mqv1.FetchRequest) 
 	return resp, nil
 }
 
+// CommitOffset persists the consumer's next-fetch offset for a partition.
 func (s *MessageQueueServer) CommitOffset(ctx context.Context, req *mqv1.CommitRequest) (*mqv1.CommitResponse, error) {
 	if req.GetGroup() == "" || req.GetTopic() == "" {
 		return nil, status.Error(codes.InvalidArgument, "group and topic required")
 	}
 	if err := s.CommitUC.Commit(ctx, req.GetGroup(), req.GetTopic(), req.GetPartition(), req.GetOffset()); err != nil {
+		s.Log.Error("commit failed", "component", "grpc", "group", req.GetGroup(), "topic", req.GetTopic(), "partition", req.GetPartition(), "err", err)
 		return nil, mapRPCError(err)
 	}
 	return &mqv1.CommitResponse{Ok: true}, nil
 }
 
+// JoinGroup registers a consumer in a group and returns the current generation.
 func (s *MessageQueueServer) JoinGroup(ctx context.Context, req *mqv1.JoinRequest) (*mqv1.JoinResponse, error) {
 	if req.GetGroup() == "" || req.GetTopic() == "" || req.GetMemberId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "group, topic, member_id required")
@@ -111,6 +120,7 @@ func (s *MessageQueueServer) JoinGroup(ctx context.Context, req *mqv1.JoinReques
 	return &mqv1.JoinResponse{GenerationId: gen}, nil
 }
 
+// Heartbeat refreshes a member's liveness and reports whether a rejoin is needed.
 func (s *MessageQueueServer) Heartbeat(ctx context.Context, req *mqv1.HeartbeatRequest) (*mqv1.HeartbeatResponse, error) {
 	if req.GetGroup() == "" || req.GetMemberId() == "" || req.GetGenerationId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "group, member_id, generation_id required")
@@ -122,6 +132,7 @@ func (s *MessageQueueServer) Heartbeat(ctx context.Context, req *mqv1.HeartbeatR
 	return &mqv1.HeartbeatResponse{RebalanceNeeded: need}, nil
 }
 
+// GetAssignment returns the partition assignment for a member in a given generation.
 func (s *MessageQueueServer) GetAssignment(ctx context.Context, req *mqv1.AssignRequest) (*mqv1.AssignResponse, error) {
 	if req.GetGroup() == "" || req.GetMemberId() == "" || req.GetGenerationId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "group, member_id, generation_id required")
@@ -140,6 +151,7 @@ func (s *MessageQueueServer) GetAssignment(ctx context.Context, req *mqv1.Assign
 	return out, nil
 }
 
+// LeaveGroup removes a consumer from the group, triggering rebalance for remaining members.
 func (s *MessageQueueServer) LeaveGroup(ctx context.Context, req *mqv1.LeaveRequest) (*mqv1.LeaveResponse, error) {
 	if req.GetGroup() == "" || req.GetMemberId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "group and member_id required")
@@ -162,6 +174,8 @@ func domainMessageToProto(m domain.Message) *mqv1.Message {
 
 var _ mqv1.MessageQueueServiceServer = (*MessageQueueServer)(nil)
 
+// mapRPCError translates domain/infrastructure sentinel errors into the
+// appropriate gRPC status codes.
 func mapRPCError(err error) error {
 	switch {
 	case err == nil:

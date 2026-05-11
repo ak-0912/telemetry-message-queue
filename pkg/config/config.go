@@ -1,3 +1,8 @@
+// Package config loads runtime configuration from environment variables.
+//
+// All settings use the MQ_ prefix (e.g. MQ_GRPC_PORT) except LOG_LEVEL,
+// which is read without a prefix for compatibility with common logging
+// conventions.
 package config
 
 import (
@@ -7,20 +12,21 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config holds runtime configuration from environment variables.
+// Config holds the runtime settings for the message queue server.
 type Config struct {
-	GRPCPort            int
-	HTTPPort            int
-	PartitionCount      int
-	DataDir             string
-	Retention           time.Duration
-	HeartbeatTimeoutSec int
-	MaxGroupMembers     int
-	MaxPartitionSize    int
-	LogLevel            string
-	FetchBatchDefault   int32
+	GRPCPort            int           // MQ_GRPC_PORT (default 50051)
+	HTTPPort            int           // MQ_HTTP_PORT (default 8080)
+	PartitionCount      int           // MQ_PARTITION_COUNT (default 256)
+	DataDir             string        // MQ_DATA_DIR — root for WAL and offset files (default /data/mq)
+	Retention           time.Duration // MQ_RETENTION_HOURS converted to time.Duration (default 24h)
+	HeartbeatTimeoutSec int           // MQ_HEARTBEAT_TIMEOUT_SEC — stale-member eviction threshold (default 15)
+	MaxGroupMembers     int           // MQ_MAX_GROUP_MEMBERS — cap per consumer group (default 10)
+	MaxPartitionSize    int           // MQ_MAX_PARTITION_SIZE — retained messages per partition (default 100 000)
+	LogLevel            string        // LOG_LEVEL — debug|info|warn|error (default info, no MQ_ prefix)
+	FetchBatchDefault   int32         // MQ_FETCH_BATCH_DEFAULT — max messages per Fetch when client sends 0 (default 200)
 }
 
+// Load reads environment variables (with defaults) and returns a validated Config.
 func Load() (*Config, error) {
 	v := viper.New()
 	v.SetEnvPrefix("MQ")
@@ -36,9 +42,10 @@ func Load() (*Config, error) {
 	v.SetDefault("MAX_GROUP_MEMBERS", 10)
 	v.SetDefault("MAX_PARTITION_SIZE", 100000)
 	v.SetDefault("FETCH_BATCH_DEFAULT", 200)
+
+	// LOG_LEVEL is bound without the MQ_ prefix.
 	_ = v.BindEnv("LOG_LEVEL", "LOG_LEVEL")
 	v.SetDefault("LOG_LEVEL", "info")
-	logLevel := v.GetString("LOG_LEVEL")
 
 	retentionH := v.GetInt("RETENTION_HOURS")
 	if retentionH <= 0 {
@@ -54,7 +61,7 @@ func Load() (*Config, error) {
 		HeartbeatTimeoutSec: v.GetInt("HEARTBEAT_TIMEOUT_SEC"),
 		MaxGroupMembers:     v.GetInt("MAX_GROUP_MEMBERS"),
 		MaxPartitionSize:    v.GetInt("MAX_PARTITION_SIZE"),
-		LogLevel:            logLevel,
+		LogLevel:            v.GetString("LOG_LEVEL"),
 		FetchBatchDefault:   int32(v.GetInt("FETCH_BATCH_DEFAULT")),
 	}, nil
 }

@@ -1,3 +1,6 @@
+// Package offset implements domain.OffsetStore with JSON-file-backed
+// persistence. Each consumer group gets a separate JSON file under the
+// configured data directory; writes use atomic rename for crash safety.
 package offset
 
 import (
@@ -30,6 +33,8 @@ type groupOffsets struct {
 	path   string
 }
 
+// NewFileOffsetStore creates a store rooted at dataDir, loading any existing
+// group JSON files from previous runs.
 func NewFileOffsetStore(dataDir string) (*FileOffsetStore, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
@@ -97,6 +102,8 @@ func (s *FileOffsetStore) group(group string) *groupOffsets {
 	return g
 }
 
+// Get returns the committed next-fetch offset for a group/topic/partition,
+// or 0 if no offset has been committed.
 func (s *FileOffsetStore) Get(ctx context.Context, group, topic string, partition int32) int64 {
 	_ = ctx
 	s.mu.RLock()
@@ -115,6 +122,8 @@ func (s *FileOffsetStore) Get(ctx context.Context, group, topic string, partitio
 	return pm[key]
 }
 
+// Commit persists a new next-fetch offset. It rejects offset regression
+// (new < current) with ErrOffsetRegression and flushes the group JSON to disk.
 func (s *FileOffsetStore) Commit(ctx context.Context, group, topic string, partition int32, offset int64) error {
 	_ = ctx
 	g := s.group(group)
@@ -145,6 +154,8 @@ func (s *FileOffsetStore) EnsureConsumerTopic(ctx context.Context, group, topic 
 	return nil
 }
 
+// flushLocked writes the group offsets to a temp file and atomically renames
+// it into place. Must be called with g.mu held.
 func (g *groupOffsets) flushLocked() error {
 	payload := struct {
 		Topics map[string]map[string]int64 `json:"topics"`

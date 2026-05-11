@@ -1,3 +1,5 @@
+// Package store implements the domain.PartitionStore interface with in-memory
+// partition logs backed by per-partition append-only WAL files.
 package store
 
 import (
@@ -13,7 +15,9 @@ import (
 	mqv1 "github.com/cisco-interview/telemetry-message-queue/proto/mq/v1"
 )
 
-// MemoryPartitionStore is an in-memory log per partition with WAL persistence.
+// MemoryPartitionStore keeps an ordered message slice per partition in memory
+// and persists every append to a length-prefixed protobuf WAL on disk.
+// On startup the WAL is replayed to rebuild the in-memory state.
 type MemoryPartitionStore struct {
 	mu sync.RWMutex
 
@@ -40,7 +44,8 @@ type partitionLog struct {
 	walPath    string
 }
 
-// NewMemoryPartitionStore creates a store. offsets is used for retention GC watermarks.
+// NewMemoryPartitionStore creates a store rooted at dataDir. The offsets store
+// is consulted during retention GC to avoid trimming unconsumed messages.
 func NewMemoryPartitionStore(dataDir string, defaultPartitions int, retention time.Duration, maxPerPartition int, offsets domain.OffsetStore) *MemoryPartitionStore {
 	return &MemoryPartitionStore{
 		dataDir:           dataDir,
@@ -52,6 +57,8 @@ func NewMemoryPartitionStore(dataDir string, defaultPartitions int, retention ti
 	}
 }
 
+// EnsureTopic idempotently creates partition logs (and their WAL files) for
+// the given topic. If the topic already exists, this is a no-op.
 func (s *MemoryPartitionStore) EnsureTopic(topic string, partitionCount int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,11 +101,15 @@ func (s *MemoryPartitionStore) KnownTopics() []string {
 	return out
 }
 
+// walPath returns the on-disk path for a partition WAL, sanitising topic
+// names that contain slashes.
 func (s *MemoryPartitionStore) walPath(topic string, partition int32) string {
 	t := strings.ReplaceAll(topic, "/", "_")
 	return fmt.Sprintf("%s/partitions/%s/%d.wal", s.dataDir, t, partition)
 }
 
+// openPartition opens (or creates) the WAL file and replays any existing
+// records to rebuild the in-memory message slice.
 func (s *MemoryPartitionStore) openPartition(topic string, id int32) (*partitionLog, error) {
 	path := s.walPath(topic, id)
 	w, err := OpenWal(path)
@@ -131,6 +142,8 @@ func (s *MemoryPartitionStore) openPartition(topic string, id int32) (*partition
 	return pl, nil
 }
 
+// getLog returns the partitionLog for the given topic/partition or an
+// ErrUnknownTopic / ErrInvalidPartition sentinel error.
 func (s *MemoryPartitionStore) getLog(topic string, partition int32) (*partitionLog, error) {
 	s.mu.RLock()
 	tp, ok := s.topics[topic]
@@ -144,6 +157,8 @@ func (s *MemoryPartitionStore) getLog(topic string, partition int32) (*partition
 	return tp.logs[partition], nil
 }
 
+// Append writes a message to the partition log and WAL. On WAL failure the
+// offset is rolled back so the in-memory state stays consistent.
 func (s *MemoryPartitionStore) Append(ctx context.Context, topic string, partition int32, key string, payload []byte) (int64, error) {
 	_ = ctx
 	pl, err := s.getLog(topic, partition)
@@ -177,6 +192,8 @@ func (s *MemoryPartitionStore) Append(ctx context.Context, topic string, partiti
 	return off, nil
 }
 
+// Fetch returns up to max messages starting from offset (inclusive). Returned
+// payloads are deep-copied so the caller cannot mutate the log.
 func (s *MemoryPartitionStore) Fetch(ctx context.Context, topic string, partition int32, offset int64, max int32) ([]domain.Message, error) {
 	_ = ctx
 	pl, err := s.getLog(topic, partition)
@@ -198,9 +215,8 @@ func (s *MemoryPartitionStore) Fetch(ctx context.Context, topic string, partitio
 	if end > len(pl.messages) {
 		end = len(pl.messages)
 	}
-	var out []domain.Message
-	out = make([]domain.Message, 0, end-start)
-	out = append(out, pl.messages[start:end]...)
+	out := make([]domain.Message, end-start)
+	copy(out, pl.messages[start:end])
 	// Return deep copy of payloads
 	for i := range out {
 		out[i].Payload = append([]byte(nil), out[i].Payload...)
@@ -242,6 +258,9 @@ func (s *MemoryPartitionStore) MessageCount(topic string, partition int32) int {
 	return len(pl.messages)
 }
 
+// RunRetentionGC walks every partition, trims messages that are both older
+// than the retention window and past the commit watermark, and rewrites the
+// WAL for any partition that was trimmed.
 func (s *MemoryPartitionStore) RunRetentionGC(ctx context.Context) {
 	s.mu.RLock()
 	topics := make(map[string]*topicPartitions, len(s.topics))
@@ -259,12 +278,14 @@ func (s *MemoryPartitionStore) RunRetentionGC(ctx context.Context) {
 			if pl == nil {
 				continue
 			}
-			_ = i
 			s.trimPartition(ctx, pl, topic, int32(i), cutoff, maxSz, offsets)
 		}
 	}
 }
 
+// trimPartition drops messages from the head of the log that are both
+// expired (older than cutoff) and already consumed (offset < minCommitWatermark).
+// A second pass enforces the per-partition size cap.
 func (s *MemoryPartitionStore) trimPartition(ctx context.Context, pl *partitionLog, topic string, partition int32, cutoff time.Time, maxSz int, offsets domain.OffsetStore) {
 	_ = ctx
 	minNext := int64(1<<62 - 1)
@@ -300,6 +321,8 @@ func (s *MemoryPartitionStore) trimPartition(ctx context.Context, pl *partitionL
 	}
 }
 
+// rewritePartitionWAL replaces the WAL file with a fresh one containing only
+// the messages still in memory. Must be called with pl.mu held.
 func rewritePartitionWAL(pl *partitionLog) error {
 	if pl.wal != nil {
 		_ = pl.wal.Close()

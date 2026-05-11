@@ -6,6 +6,8 @@ import (
 	"github.com/cisco-interview/telemetry-message-queue/internal/domain"
 )
 
+// CoordinatorUsecase is a thin adapter over the domain.GroupCoordinator
+// interface; it exists so the gRPC layer depends on application types only.
 type CoordinatorUsecase struct {
 	Coordinator domain.GroupCoordinator
 }

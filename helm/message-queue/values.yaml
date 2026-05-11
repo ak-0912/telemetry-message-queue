@@ -1,7 +1,9 @@
+fullnameOverride: telemetry-message-queue
+
 replicaCount: 1
 
 image:
-  repository: your-org/message-queue
+  repository: telemetry-message-queue
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -16,6 +18,7 @@ config:
   heartbeatTimeoutSec: 15
   maxGroupMembers: 10
   maxPartitionSize: 100000
+  fetchBatchDefault: 200
   logLevel: info
 
 resources:

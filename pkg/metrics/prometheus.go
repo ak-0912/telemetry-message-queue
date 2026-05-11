@@ -1,3 +1,6 @@
+// Package metrics registers Prometheus collectors for the message queue
+// service. All methods on MQ are nil-receiver safe so callers do not need
+// nil-checks around instrumentation calls.
 package metrics
 
 import (

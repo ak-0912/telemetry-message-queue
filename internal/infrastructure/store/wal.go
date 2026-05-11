@@ -11,11 +11,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// WalWriter appends length-prefixed protobuf mq.v1.Message records.
+// WalWriter appends length-prefixed protobuf mq.v1.Message records to an
+// append-only file. Each record is [4-byte big-endian length][protobuf bytes]
+// and is fsync'd after every write for durability.
 type WalWriter struct {
 	f *os.File
 }
 
+// OpenWal opens (or creates) a WAL file for appending. Parent directories
+// are created automatically.
 func OpenWal(path string) (*WalWriter, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
@@ -27,6 +31,7 @@ func OpenWal(path string) (*WalWriter, error) {
 	return &WalWriter{f: f}, nil
 }
 
+// Append serialises and writes a single record, followed by fsync.
 func (w *WalWriter) Append(msg *mqv1.Message) error {
 	b, err := proto.Marshal(msg)
 	if err != nil {
@@ -43,6 +48,7 @@ func (w *WalWriter) Append(msg *mqv1.Message) error {
 	return w.f.Sync()
 }
 
+// Close flushes and closes the underlying file. Safe to call on a nil receiver.
 func (w *WalWriter) Close() error {
 	if w == nil || w.f == nil {
 		return nil
